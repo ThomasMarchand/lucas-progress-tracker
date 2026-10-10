@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lucas's Pokémon Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #f0fdf4;
+            background-image: radial-gradient(#cbd5e1 2px, transparent 2px);
+            background-size: 24px 24px;
+            /* Prevent pull-to-refresh on mobile/tablet */
+            overscroll-behavior-y: none;
+        }
+
+        /* Responsive Pokéball styling - larger for touch */
+        .pokeball {
+            width: 64px; 
+            height: 64px;
+            border-radius: 50%;
+            border: 4px solid #1f2937;
+            position: relative;
+            box-shadow: inset -2px -2px 6px rgba(0,0,0,0.3), 0 4px 6px rgba(0,0,0,0.15);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @media (max-width: 640px) {
+            .pokeball {
+                width: 56px;
+                height: 56px;
+            }
+        }
+
+        /* Mewtwo's Master/Psychic Ball Theme (Purple & White) */
+        .pokeball.mewtwo { background: linear-gradient(to bottom, #a855f7 50%, white 50%); }
+        
+        /* Pikachu's Electric Ball Theme (Yellow & Red) */
+        .pokeball.pikachu { background: linear-gradient(to bottom, #eab308 50%, #ef4444 50%); }
+
+        /* Pokéball center lines and buttons */
+        .pokeball::before {
+            content: ''; position: absolute; top: 50%; width: 100%; height: 4px; 
+            background: #1f2937; transform: translateY(-50%); left: 0;
+        }
+        .pokeball::after {
+            content: ''; position: absolute; top: 50%; left: 50%; width: 18px; height: 18px;
+            background: white; border: 3px solid #1f2937; border-radius: 50%; 
+            transform: translate(-50%, -50%);
+            box-shadow: inset -1px -1px 2px rgba(0,0,0,0.2);
+            transition: background-color 0.2s;
+        }
+
+        /* State: Unchecked (Grayed out) */
+        .pokeball.locked {
+            filter: grayscale(100%) opacity(40%);
+            transform: scale(0.9);
+        }
+        
+        /* State: Next available to click (Pulsing) */
+        .pokeball.next {
+            animation: pulse-ring 1.5s infinite;
+            filter: none;
+            transform: scale(1.05);
+        }
+
+        /* State: Checked (Colorful with checkmark) */
+        .pokeball.checked {
+            filter: none;
+            transform: scale(1);
+        }
+        
+        /* Glowing center when checked */
+        .pokeball.checked::after {
+            background-color: #4ade80; /* Green light */
+        }
+
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { box-shadow: 0 0 0 16px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+
+        /* Touch-friendly buttons */
+        .btn-press {
+            transition: transform 0.1s, background-color 0.2s;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        .btn-press:active {
+            transform: scale(0.95);
+        }
+        
+        /* Rainbow text gradient */
+        .text-rainbow {
+            background-image: linear-gradient(to right, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #a855f7);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        /* Character Images */
+        .card-img {
+            height: 160px;
+            object-fit: contain;
+            margin-top: -30px; /* Pulls image up over the border */
+            filter: drop-shadow(0 10px 8px rgba(0,0,0,0.2));
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        /* Fanned out Card Stack CSS */
+        .card-stack {
+            position: relative;
+            width: 80px;
+            height: 110px;
+            margin: 10px auto 25px auto;
+        }
+        
+        .css-card {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+            border: 3px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+            transform-origin: bottom center;
+            transition: transform 0.3s ease;
+            /* Inner detailing to look more like a card */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .css-card::before {
+            content: '';
+            position: absolute;
+            width: 85%;
+            height: 88%;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 4px;
+        }
+        
+        /* Fan out the cards */
+        .css-card:nth-child(1) { transform: rotate(-15deg) translate(-20px, 5px); z-index: 1; }
+        .css-card:nth-child(2) { transform: rotate(15deg) translate(20px, 5px); z-index: 2; }
+        .css-card:nth-child(3) { transform: rotate(0deg); z-index: 3; }
+        
+        /* Metal Silver Gradient */
+        .silver-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 30%, #ffffff 50%, #94a3b8 70%, #f1f5f9 100%);
+        }
+        
+        /* Pastel Rainbow Gradient */
+        .rainbow-card {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 20%, #a1c4fd 40%, #c2e9fb 60%, #d4fc79 80%, #fbc2eb 100%);
+        }
+        
+        /* 10x Badge */
+        .card-badge {
+            position: absolute;
+            bottom: -12px;
+            right: -25px;
+            background: #ef4444;
+            color: white;
+            font-weight: 900;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 1.25rem;
+            border: 3px solid white;
+            z-index: 20;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transform: rotate(-10deg);
+        }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4 flex flex-col items-center">
+
+    <header class="text-center mb-12 max-w-2xl w-full mt-4">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-gray-800 mb-3 drop-shadow-sm">
+            ⚡ Lucas's Tracker ⚡
+        </h1>
+        <p class="text-lg md:text-xl text-gray-600 font-semibold bg-white inline-block px-6 py-2 rounded-full shadow-sm border-2 border-gray-200">
+            Tap the bouncing Pokéball every day!
+        </p>
+    </header>
+
+    <!-- Main Grid: items-stretch ensures both challenge blocks are exactly the same height on tablets/desktop -->
+    <main class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-8 items-stretch pb-10">
+        
+        <!-- Challenge 1: Mewtwo -->
+        <section class="bg-white rounded-3xl p-6 shadow-xl border-4 border-purple-300 relative flex flex-col items-center text-center w-full h-full">
+            <div class="absolute top-0 left-0 w-full h-5 bg-purple-500 rounded-t-2xl"></div>
+            
+            <!-- High-quality Mewtwo Sprite from PokeAPI -->
+            <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/150.png" alt="Mewtwo" class="card-img z-10 relative">
+            
+            <!-- Fixed Height Header Wrapper: This forces the reward blocks to align perfectly across both cards -->
+            <div class="h-[130px] flex flex-col justify-center items-center w-full mb-2">
+                <h2 class="text-3xl md:text-4xl font-extrabold text-purple-700 mb-2 tracking-wide leading-tight">Mewtwo's<br>Rest Quest</h2>
+                <p class="text-lg md:text-xl text-gray-700 font-bold bg-purple-50 px-4 py-1.5 rounded-full border border-purple-200 shadow-sm">
+                    Stay in bed until 7:00 AM
+                </p>
+            </div>
+            
+            <!-- Clear Reward Banner (Silver Cards) -->
+            <!-- Flex-1 ensures this block takes up equal space if the container grows -->
+            <div class="w-full flex-1 flex flex-col justify-center bg-gradient-to-br from-slate-100 via-gray-50 to-slate-200 p-5 rounded-2xl border-2 border-slate-300 mb-6 shadow-inner relative overflow-hidden">
+                <div class="absolute inset-0 bg-white opacity-40 rounded-2xl" style="background-image: radial-gradient(#94a3b8 1px, transparent 1px); background-size: 10px 10px;"></div>
+                <div class="relative z-10">
+                    <p class="text-sm md:text-base uppercase font-extrabold tracking-widest text-slate-500 mb-4">Complete 7 Days for:</p>
+                    
+                    <div class="card-stack">
+                        <div class="css-card silver-card"></div>
+                        <div class="css-card silver-card"></div>
+                        <div class="css-card silver-card">
+                            <div class="w-8 h-8 rounded-full bg-slate-300 opacity-50 absolute"></div>
+                            <div class="card-badge">10x</div>
+                        </div>
+                    </div>
+
+                    <p class="text-2xl md:text-3xl font-black text-slate-700 drop-shadow-sm mt-4">
+                        SILVER CARDS
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Progress Tracker -->
+            <div class="flex flex-wrap justify-center gap-3 md:gap-4 lg:gap-5 mb-8 min-h-[100px] w-full" id="mewtwo-tracker">
+                <!-- Pokéballs injected by JS -->
+            </div>
+
+            <!-- Controls (mt-auto pushes this firmly to the bottom edge consistently) -->
+            <div id="mewtwo-controls" class="w-full flex justify-center mt-auto">
+                <button id="reset-btn-mewtwo" onclick="handleResetClick('mewtwo')" class="btn-press bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-4 px-6 rounded-2xl text-lg md:text-xl shadow-[0_4px_0_#d1d5db] hover:shadow-[0_2px_0_#d1d5db] hover:translate-y-[2px] w-full border-2 border-gray-200">
+                    Oops, Reset to Day 1
+                </button>
+            </div>
+
+            <!-- Victory Screen -->
+            <div id="mewtwo-victory" class="hidden flex-col items-center bg-purple-50 p-4 rounded-2xl border-2 border-purple-200 w-full mt-auto">
+                <h3 class="text-3xl md:text-4xl font-bold text-purple-600 mb-2 animate-bounce">🎉 YOU DID IT! 🎉</h3>
+                <p class="text-lg md:text-xl font-bold text-gray-800 mb-4">Time for your Silver Cards!</p>
+                <button onclick="startNewWeek('mewtwo')" class="btn-press bg-purple-600 text-white font-bold py-4 px-6 rounded-2xl text-xl shadow-[0_4px_0_#7e22ce] hover:shadow-[0_2px_0_#7e22ce] hover:translate-y-[2px] w-full">
+                    Start a New Week!
+                </button>
+            </div>
+        </section>
+
+        <!-- Challenge 2: Pikachu -->
+        <section class="bg-white rounded-3xl p-6 shadow-xl border-4 border-yellow-400 relative flex flex-col items-center text-center w-full h-full">
+            <div class="absolute top-0 left-0 w-full h-5 bg-yellow-400 rounded-t-2xl"></div>
+            
+            <!-- High-quality Pikachu Sprite from PokeAPI -->
+            <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" alt="Pikachu" class="card-img z-10 relative">
+            
+            <!-- Fixed Height Header Wrapper: Exact same height as Mewtwo to enforce alignment -->
+            <div class="h-[130px] flex flex-col justify-center items-center w-full mb-2">
+                <h2 class="text-3xl md:text-4xl font-extrabold text-yellow-600 mb-2 tracking-wide leading-tight">Pikachu's<br>Dry Shield</h2>
+                <p class="text-lg md:text-xl text-gray-700 font-bold bg-yellow-50 px-4 py-1.5 rounded-full border border-yellow-200 shadow-sm">
+                    Keep diaper dry all night
+                </p>
+            </div>
+            
+            <!-- Clear Reward Banner (Rainbow Cards) -->
+            <!-- Flex-1 matches the Mewtwo card perfectly -->
+            <div class="w-full flex-1 flex flex-col justify-center bg-gradient-to-br from-red-100 via-yellow-100 to-blue-100 p-5 rounded-2xl border-2 border-yellow-300 mb-6 shadow-inner relative overflow-hidden">
+                <div class="absolute inset-0 bg-white opacity-30 rounded-2xl" style="background-image: radial-gradient(#fbbf24 1px, transparent 1px); background-size: 10px 10px;"></div>
+                <div class="relative z-10">
+                    <p class="text-sm md:text-base uppercase font-extrabold tracking-widest text-yellow-700 mb-4 drop-shadow-[0_1px_1px_rgba(255,255,255,1)]">Complete 7 Days for:</p>
+                    
+                    <div class="card-stack">
+                        <div class="css-card rainbow-card"></div>
+                        <div class="css-card rainbow-card"></div>
+                        <div class="css-card rainbow-card">
+                            <div class="w-8 h-8 rounded-full bg-white opacity-40 absolute"></div>
+                            <div class="card-badge">10x</div>
+                        </div>
+                    </div>
+
+                    <p class="text-2xl md:text-3xl font-black text-rainbow drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)] mt-4">
+                        RAINBOW CARDS
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Progress Tracker -->
+            <div class="flex flex-wrap justify-center gap-3 md:gap-4 lg:gap-5 mb-8 min-h-[100px] w-full" id="pikachu-tracker">
+                <!-- Pokéballs injected by JS -->
+            </div>
+
+            <!-- Controls (mt-auto) -->
+            <div id="pikachu-controls" class="w-full flex justify-center mt-auto">
+                <button id="reset-btn-pikachu" onclick="handleResetClick('pikachu')" class="btn-press bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-4 px-6 rounded-2xl text-lg md:text-xl shadow-[0_4px_0_#d1d5db] hover:shadow-[0_2px_0_#d1d5db] hover:translate-y-[2px] w-full border-2 border-gray-200">
+                    Oops, Reset to Day 1
+                </button>
+            </div>
+
+            <!-- Victory Screen -->
+            <div id="pikachu-victory" class="hidden flex-col items-center bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-200 w-full mt-auto">
+                <h3 class="text-3xl md:text-4xl font-bold text-red-500 mb-2 animate-bounce">🎉 YOU DID IT! 🎉</h3>
+                <p class="text-lg md:text-xl font-bold text-gray-800 mb-4">Time for your Rainbow Cards!</p>
+                <button onclick="startNewWeek('pikachu')" class="btn-press bg-red-500 text-white font-bold py-4 px-6 rounded-2xl text-xl shadow-[0_4px_0_#b91c1c] hover:shadow-[0_2px_0_#b91c1c] hover:translate-y-[2px] w-full">
+                    Start a New Week!
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // State management (localStorage ensures persistent saves across sessions/refreshes)
+        let progress = {
+            mewtwo: parseInt(localStorage.getItem('mewtwoProgress')) || 0,
+            pikachu: parseInt(localStorage.getItem('pikachuProgress')) || 0
+        };
+
+        // State to handle the kid-safe double tap confirmation for resetting
+        let resetConfirmState = {
+            mewtwo: false,
+            pikachu: false
+        };
+
+        const totalDays = 7;
+
+        // Boot UI on load
+        function init() {
+            renderTracker('mewtwo');
+            renderTracker('pikachu');
+            updateVisibility('mewtwo');
+            updateVisibility('pikachu');
+        }
+
+        // Render the 7 Pokeballs for a challenge
+        function renderTracker(type) {
+            const container = document.getElementById(`${type}-tracker`);
+            container.innerHTML = ''; 
+            
+            for (let i = 1; i <= totalDays; i++) {
+                const dayWrapper = document.createElement('div');
+                dayWrapper.className = 'flex flex-col items-center gap-1.5';
+                
+                const ball = document.createElement('div');
+                
+                // Visual state logic
+                let stateClass = 'locked';
+                if (i <= progress[type]) {
+                    stateClass = 'checked';
+                } else if (i === progress[type] + 1) {
+                    stateClass = 'next';
+                }
+
+                ball.className = `pokeball ${type} ${stateClass}`;
+                
+                // Allow tapping
+                ball.onclick = () => handleBallClick(type, i);
+                
+                // Green checkmark overlay
+                if (stateClass === 'checked') {
+                    const check = document.createElement('div');
+                    check.className = 'absolute -right-2 -top-2 bg-green-500 rounded-full w-8 h-8 flex items-center justify-center text-white font-extrabold text-lg border-[3px] border-white shadow-md z-10';
+                    check.innerHTML = '✓';
+                    ball.appendChild(check);
+                }
+
+                // Day Label
+                const label = document.createElement('span');
+                label.className = 'text-sm md:text-base font-bold mt-1';
+                if (stateClass === 'checked') {
+                    label.classList.add('text-green-600');
+                } else if (stateClass === 'next') {
+                    label.classList.add('text-gray-800');
+                } else {
+                    label.classList.add('text-gray-400');
+                }
+                label.innerText = `Day ${i}`;
+
+                dayWrapper.appendChild(ball);
+                dayWrapper.appendChild(label);
+                container.appendChild(dayWrapper);
+            }
+        }
+
+        // Handle tapping a pokeball
+        function handleBallClick(type, dayNum) {
+            // Enforce sequence: Only the *next* day can be tapped
+            if (dayNum === progress[type] + 1) {
+                progress[type] = dayNum;
+                // Save to local storage immediately
+                localStorage.setItem(`${type}Progress`, progress[type]);
+                
+                renderTracker(type);
+                updateVisibility(type);
+
+                // Quick bounce animation on the container wrapper
+                const container = document.getElementById(`${type}-tracker`);
+                container.style.transition = "transform 0.15s ease-out";
+                container.style.transform = 'scale(1.05)';
+                setTimeout(() => container.style.transform = 'scale(1)', 150);
+
+                // Check Victory condition
+                if (progress[type] === totalDays) {
+                    triggerConfetti(type === 'mewtwo' ? ['#a855f7', '#d8b4fe', '#ffffff'] : ['#eab308', '#ef4444', '#3b82f6']);
+                }
+            }
+        }
+
+        // Kid-safe reset logic (Requires double tap within 3 seconds)
+        function handleResetClick(type) {
+            const btn = document.getElementById(`reset-btn-${type}`);
+            
+            if (!resetConfirmState[type]) {
+                // First Tap
+                resetConfirmState[type] = true;
+                
+                // Style as warning
+                btn.innerText = "Are you sure? Tap again!";
+                btn.classList.replace('bg-gray-100', 'bg-red-500');
+                btn.classList.replace('text-gray-600', 'text-white');
+                btn.classList.replace('shadow-[0_4px_0_#d1d5db]', 'shadow-[0_4px_0_#991b1b]');
+                btn.classList.replace('hover:shadow-[0_2px_0_#d1d5db]', 'hover:shadow-[0_2px_0_#991b1b]');
+                btn.classList.replace('hover:bg-gray-200', 'hover:bg-red-600');
+                btn.classList.replace('border-gray-200', 'border-red-600');
+                
+                // Auto-cancel confirmation after 3 seconds
+                setTimeout(() => {
+                    if (resetConfirmState[type]) {
+                        resetConfirmState[type] = false;
+                        resetButtonStyling(btn);
+                    }
+                }, 3000);
+            } else {
+                // Second Tap (Confirmed)
+                progress[type] = 0;
+                localStorage.setItem(`${type}Progress`, 0);
+                resetConfirmState[type] = false;
+                
+                resetButtonStyling(btn);
+                renderTracker(type);
+                updateVisibility(type);
+            }
+        }
+
+        // Revert button styling helper
+        function resetButtonStyling(btn) {
+            btn.innerText = "Oops, Reset to Day 1";
+            btn.classList.replace('bg-red-500', 'bg-gray-100');
+            btn.classList.replace('text-white', 'text-gray-600');
+            btn.classList.replace('shadow-[0_4px_0_#991b1b]', 'shadow-[0_4px_0_#d1d5db]');
+            btn.classList.replace('hover:shadow-[0_2px_0_#991b1b]', 'hover:shadow-[0_2px_0_#d1d5db]');
+            btn.classList.replace('hover:bg-red-600', 'hover:bg-gray-200');
+            btn.classList.replace('border-red-600', 'border-gray-200');
+        }
+
+        // Reset for a new week
+        function startNewWeek(type) {
+            progress[type] = 0;
+            localStorage.setItem(`${type}Progress`, 0);
+            renderTracker(type);
+            updateVisibility(type);
+        }
+
+        // Toggle UI states
+        function updateVisibility(type) {
+            const controls = document.getElementById(`${type}-controls`);
+            const victory = document.getElementById(`${type}-victory`);
+            
+            if (progress[type] === totalDays) {
+                controls.style.display = 'none';
+                victory.style.display = 'flex';
+            } else {
+                controls.style.display = 'flex';
+                victory.style.display = 'none';
+            }
+        }
+
+        // Fun Confetti Animation!
+        function triggerConfetti(colors) {
+            var duration = 4000;
+            var end = Date.now() + duration;
+
+            (function frame() {
+                confetti({
+                    particleCount: 6,
+                    angle: 60,
+                    spread: 70,
+                    origin: { x: 0 },
+                    colors: colors
+                });
+                confetti({
+                    particleCount: 6,
+                    angle: 120,
+                    spread: 70,
+                    origin: { x: 1 },
+                    colors: colors
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            }());
+        }
+
+        // Start
+        window.onload = init;
+    </script>
+</body>
+</html>
